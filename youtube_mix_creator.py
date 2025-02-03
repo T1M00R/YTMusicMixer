@@ -1,15 +1,14 @@
 import os
 from pathlib import Path
-from typing import List, Dict
+from typing import List
 import logging
-from datetime import datetime
 from config import Config
 from downloader import download_songs
 from audio_processor import merge_audio_files
 from video_creator import create_video
 from utils import generate_timestamps, cleanup_files
 
-# Set up logging
+# Set up logging with more visible format
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'

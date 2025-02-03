@@ -58,8 +58,8 @@ def get_video_frame(video_capture, frame_number, width, height):
 def create_visualization_frame(
     audio_chunk: np.ndarray,
     background: np.ndarray,
-    height: int = 720,
-    width: int = 1280,
+    height: int = 1080,
+    width: int = 1920,
     n_bars: int = 128,
     bar_color: tuple = (255, 255, 255)
 ) -> np.ndarray:
@@ -145,13 +145,13 @@ def create_video(
         for _ in range(total_bg_frames):
             ret, frame = background_cap.read()
             if ret:
-                background_frames.append(cv2.resize(frame, (1280, 720)))
+                background_frames.append(cv2.resize(frame, (1920, 1080)))
         background_cap.release()
         
         # Prepare video writer with hardware acceleration if available
         temp_video = os.path.join(temp_dir, "temp_video.mp4")
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        out = cv2.VideoWriter(temp_video, fourcc, fps, (1280, 720))
+        out = cv2.VideoWriter(temp_video, fourcc, fps, (1920, 1080))
         
         # Generate frames with progress bar
         with tqdm(total=n_frames, desc="Generating frames") as pbar:
