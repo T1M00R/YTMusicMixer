@@ -11,7 +11,7 @@ class Config:
     SONG_LIST_FILE = BASE_DIR / "song_list.txt"
 
     # Background image setting
-    BACKGROUND_IMAGE = str(BASE_DIR / "backgrounds" / "bg1.jpeg")
+    BACKGROUND_IMAGE = str(BASE_DIR / "backgrounds" / "bg1.jpg")
 
     # Cleanup settings
     CLEANUP_TEMP = True
