@@ -1,6 +1,6 @@
-# Music Mix Creator
+# YTMusicMixer
 
-Automatically create music mix videos with audio visualization. The program downloads songs from YouTube, merges them with crossfade transitions, and adds a looping background video with audio visualization.
+Automatically create music mix videos from YouTube songs. Downloads tracks, merges them with crossfade transitions, and adds a looping background video with audio visualization.
 
 ![Example Screenshot](docs/example.png)
 

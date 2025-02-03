@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import List
 
 class Config:
+    """Configuration for YTMusicMixer"""
     # Directories
     BASE_DIR = Path(__file__).parent
     TEMP_DIR = BASE_DIR / "temp"
