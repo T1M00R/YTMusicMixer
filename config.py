@@ -13,6 +13,9 @@ class Config:
     # Background image setting
     BACKGROUND_IMAGE = str(BASE_DIR / "backgrounds" / "bg1.jpg")
 
+    # Background video setting
+    BACKGROUND_VIDEO = str(BASE_DIR / "backgrounds" / "bg.mp4")
+
     # Cleanup settings
     CLEANUP_TEMP = True
 

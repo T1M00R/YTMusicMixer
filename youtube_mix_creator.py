@@ -57,7 +57,7 @@ def create_music_mix(config: Config) -> bool:
         logger.info("Creating video...")
         final_video = create_video(
             merged_audio,
-            config.BACKGROUND_IMAGE,
+            config.BACKGROUND_VIDEO,
             config.OUTPUT_DIR,
         )
 

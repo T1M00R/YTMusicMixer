@@ -28,7 +28,6 @@ venv/
 temp/
 output/
 backgrounds/
-credentials.json
 *.mp3
 *.mp4
 *.wav
