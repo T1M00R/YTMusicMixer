@@ -87,7 +87,16 @@ def create_music_mix(config: Config) -> bool:
                 # Update timestamps with generated song titles
                 if "song_titles" in result:
                     timestamp_file = config.OUTPUT_DIR / "timestamps.txt"
-                    update_timestamps_with_titles(timestamp_file, result["song_titles"])
+                    if update_timestamps_with_titles(timestamp_file, result["song_titles"]):
+                        # Read updated timestamps
+                        with open(timestamp_file, "r", encoding="utf-8") as f:
+                            updated_timestamps = f.read()
+                        
+                        # Add timestamps to mix description
+                        with open(config.OUTPUT_DIR / "mix_description.txt", "r+", encoding="utf-8") as f:
+                            content = f.read()
+                            f.seek(0)
+                            f.write(content + "\n\nTimestamps:\n" + updated_timestamps)
             else:
                 logger.error(f"Error generating description: {result['error']}")
 
