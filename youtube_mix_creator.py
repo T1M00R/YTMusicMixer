@@ -7,7 +7,7 @@ from downloader import download_songs
 from audio_processor import merge_audio_files
 from video_creator import create_video
 from utils import generate_timestamps, cleanup_files, update_timestamps_with_titles
-from description_generator import generate_mix_description
+from description_generator import generate_mix_description, update_description_with_timestamps
 from dotenv import load_dotenv
 
 # Set up logging with more visible format
@@ -88,15 +88,9 @@ def create_music_mix(config: Config) -> bool:
                 if "song_titles" in result:
                     timestamp_file = config.OUTPUT_DIR / "timestamps.txt"
                     if update_timestamps_with_titles(timestamp_file, result["song_titles"]):
-                        # Read updated timestamps
-                        with open(timestamp_file, "r", encoding="utf-8") as f:
-                            updated_timestamps = f.read()
-                        
-                        # Add timestamps to mix description
-                        with open(config.OUTPUT_DIR / "mix_description.txt", "r+", encoding="utf-8") as f:
-                            content = f.read()
-                            f.seek(0)
-                            f.write(content + "\n\nTimestamps:\n" + updated_timestamps)
+                        # Update description with timestamps
+                        description_file = config.OUTPUT_DIR / "mix_description.txt"
+                        update_description_with_timestamps(description_file, timestamp_file)
             else:
                 logger.error(f"Error generating description: {result['error']}")
 

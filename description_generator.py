@@ -103,4 +103,39 @@ def extract_song_titles(content: str) -> List[str]:
         return titles
     except Exception as e:
         logger.error(f"Error extracting song titles: {str(e)}")
-        return [] 
+        return []
+
+def update_description_with_timestamps(description_file: Path, timestamps_file: Path):
+    """Update the song titles in the description with timestamps"""
+    try:
+        # Read the timestamps
+        with open(timestamps_file, "r", encoding="utf-8") as f:
+            timestamps = f.readlines()
+        
+        # Read the description
+        with open(description_file, "r", encoding="utf-8") as f:
+            content = f.read()
+            
+        # Split content into sections
+        sections = content.split("\n\n")
+        
+        # Find the Song Titles section
+        for i, section in enumerate(sections):
+            if section.startswith("Song Titles:"):
+                # Replace the song titles with timestamps
+                sections[i] = "Tracklist:\n" + "".join(timestamps)
+                break
+        
+        # Combine sections back together
+        updated_content = "\n\n".join(sections)
+        
+        # Write updated content back to file
+        with open(description_file, "w", encoding="utf-8") as f:
+            f.write(updated_content)
+            
+        logger.info("Successfully updated description with timestamps")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error updating description with timestamps: {str(e)}")
+        return False 

@@ -180,11 +180,15 @@ def create_video(
                 
                 # Update progress with FPS calculation
                 if frame_idx % 30 == 0:  # Update every 30 frames
-                    current_fps = frame_idx / (time.time() - start_time)
-                    pbar.set_postfix({
-                        'FPS': f"{current_fps:.1f}",
-                        'Time Left': f"{(n_frames - frame_idx) / current_fps / 60:.1f}min"
-                    })
+                    elapsed_time = time.time() - start_time
+                    if elapsed_time > 0:  # Prevent division by zero
+                        current_fps = frame_idx / elapsed_time
+                        remaining_frames = n_frames - frame_idx
+                        time_left = remaining_frames / current_fps if current_fps > 0 else 0
+                        pbar.set_postfix({
+                            'FPS': f"{current_fps:.1f}",
+                            'Time Left': f"{time_left/60:.1f}min"
+                        })
                 pbar.update(1)
         
         out.release()
