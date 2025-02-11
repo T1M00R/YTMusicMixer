@@ -54,4 +54,34 @@ def cleanup_files(temp_dir: Path):
         temp_dir.rmdir()
         logger.info("Cleaned up temporary files")
     except Exception as e:
-        logger.error(f"Error cleaning up files: {str(e)}") 
+        logger.error(f"Error cleaning up files: {str(e)}")
+
+def update_timestamps_with_titles(timestamps_file: Path, song_titles: List[str]):
+    """Update timestamps.txt with generated song titles"""
+    try:
+        if not timestamps_file.exists():
+            logger.error("Timestamps file not found")
+            return False
+            
+        with open(timestamps_file, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+            
+        if len(lines) != len(song_titles):
+            logger.error(f"Number of timestamps ({len(lines)}) doesn't match number of titles ({len(song_titles)})")
+            return False
+            
+        # Update each line with new title
+        new_lines = []
+        for i, line in enumerate(lines):
+            timestamp = line.split(" - ")[0]
+            new_lines.append(f"{timestamp} - {song_titles[i]}\n")
+            
+        with open(timestamps_file, "w", encoding="utf-8") as f:
+            f.writelines(new_lines)
+            
+        logger.info("Successfully updated timestamps with generated titles")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error updating timestamps: {str(e)}")
+        return False 
