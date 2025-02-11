@@ -7,6 +7,8 @@ from downloader import download_songs
 from audio_processor import merge_audio_files
 from video_creator import create_video
 from utils import generate_timestamps, cleanup_files
+from description_generator import generate_mix_description
+from dotenv import load_dotenv
 
 # Set up logging with more visible format
 logging.basicConfig(
@@ -14,6 +16,10 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# At the start of your script
+load_dotenv()
+api_key = os.getenv("PERPLEXITY_API_KEY")
 
 def create_music_mix(config: Config) -> bool:
     """
@@ -71,6 +77,16 @@ def create_music_mix(config: Config) -> bool:
             cleanup_files(config.TEMP_DIR)
 
         logger.info(f"Music mix video created successfully: {final_video}")
+
+        # Generate description if API key is available
+        if api_key:
+            logger.info("Generating mix description...")
+            result = generate_mix_description(api_key)
+            if result["success"]:
+                logger.info("Description generated successfully")
+            else:
+                logger.error(f"Error generating description: {result['error']}")
+
         return True
 
     except Exception as e:

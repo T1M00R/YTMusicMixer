@@ -7,6 +7,7 @@ Automatically create music mix videos from YouTube songs. Downloads tracks, merg
 ## Features
 
 - Download songs from YouTube URLs
+- Support for local MP3 and WAV files
 - Merge multiple songs with smooth 5-second crossfade transitions
 - Create audio visualization bars that react to the music
 - Use any video as a looping background
@@ -43,10 +44,11 @@ mkdir -p backgrounds temp output
 
 5. Add your songs:
 - Create a `song_list.txt` file
-- Add YouTube URLs, one per line:
+- Add YouTube URLs or local file paths, one per line:
 ```
 https://www.youtube.com/watch?v=example1
-https://www.youtube.com/watch?v=example2
+/path/to/your/song.mp3
+C:\Music\another-song.wav
 ```
 
 6. Run the program:

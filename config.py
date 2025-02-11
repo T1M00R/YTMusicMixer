@@ -7,8 +7,9 @@ class Config:
     BASE_DIR = Path(__file__).parent
     TEMP_DIR = BASE_DIR / "temp"
     OUTPUT_DIR = BASE_DIR / "output"
+    AUDIO_DIR = BASE_DIR / "audio"  # This is where we'll look for WAV files
 
-    # Song list file
+    # Input files
     SONG_LIST_FILE = BASE_DIR / "song_list.txt"
 
     # Background image setting
@@ -20,13 +21,14 @@ class Config:
     # Cleanup settings
     CLEANUP_TEMP = True
 
+
     @property
     def song_urls(self) -> List[str]:
-        """Read song URLs from song_list.txt"""
-        if not self.SONG_LIST_FILE.exists():
+        """Get list of WAV files from audio directory"""
+        if not self.AUDIO_DIR.exists():
+            self.AUDIO_DIR.mkdir(exist_ok=True)
             return []
         
-        with open(self.SONG_LIST_FILE, 'r') as f:
-            # Remove empty lines and whitespace
-            urls = [line.strip() for line in f.readlines() if line.strip()]
-        return urls 
+        # Get all .wav files from the audio directory
+        wav_files = list(self.AUDIO_DIR.glob("*.wav"))
+        return [str(file) for file in wav_files] 
