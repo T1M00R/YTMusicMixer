@@ -8,6 +8,7 @@ from scipy.io import wavfile
 import cv2
 import tempfile
 import os
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -141,11 +142,14 @@ def create_video(
         total_bg_frames = int(background_cap.get(cv2.CAP_PROP_FRAME_COUNT))
         background_frames = []
         
+        # Add progress bar for background loading
         logger.info("Loading background video frames...")
-        for _ in range(total_bg_frames):
-            ret, frame = background_cap.read()
-            if ret:
-                background_frames.append(cv2.resize(frame, (1920, 1080)))
+        with tqdm(total=total_bg_frames, desc="Loading background", unit="frames") as pbar:
+            for _ in range(total_bg_frames):
+                ret, frame = background_cap.read()
+                if ret:
+                    background_frames.append(cv2.resize(frame, (1920, 1080)))
+                pbar.update(1)
         background_cap.release()
         
         # Prepare video writer with hardware acceleration if available
@@ -153,8 +157,14 @@ def create_video(
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         out = cv2.VideoWriter(temp_video, fourcc, fps, (1920, 1080))
         
-        # Generate frames with progress bar
-        with tqdm(total=n_frames, desc="Generating frames") as pbar:
+        # Generate frames with enhanced progress bar
+        with tqdm(
+            total=n_frames,
+            desc="Generating frames",
+            unit="frames",
+            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]"
+        ) as pbar:
+            start_time = time.time()
             for frame_idx in range(n_frames):
                 # Get background frame from memory
                 background = background_frames[frame_idx % len(background_frames)]
@@ -167,11 +177,20 @@ def create_video(
                 # Create visualization frame
                 frame = create_visualization_frame(audio_chunk, background)
                 out.write(frame)
+                
+                # Update progress with FPS calculation
+                if frame_idx % 30 == 0:  # Update every 30 frames
+                    current_fps = frame_idx / (time.time() - start_time)
+                    pbar.set_postfix({
+                        'FPS': f"{current_fps:.1f}",
+                        'Time Left': f"{(n_frames - frame_idx) / current_fps / 60:.1f}min"
+                    })
                 pbar.update(1)
         
         out.release()
         
-        # Combine video with audio using more efficient settings
+        # Show progress for final encoding
+        logger.info("Encoding final video...")
         command = [
             "ffmpeg", "-y",
             "-i", temp_video,
@@ -184,7 +203,30 @@ def create_video(
             output_file
         ]
         
-        subprocess.run(command, check=True, capture_output=True)
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True
+        )
+        
+        # Monitor encoding progress
+        duration_seconds = duration
+        pattern = re.compile(r"time=(\d{2}):(\d{2}):(\d{2}.\d{2})")
+        
+        with tqdm(total=int(duration_seconds), desc="Encoding", unit="sec") as pbar:
+            while True:
+                line = process.stderr.readline()
+                if not line and process.poll() is not None:
+                    break
+                    
+                match = pattern.search(line)
+                if match:
+                    h, m, s = map(float, match.groups())
+                    current_time = h * 3600 + m * 60 + s
+                    pbar.n = int(current_time)
+                    pbar.refresh()
+        
         logger.info("Successfully created video with visualization")
         return output_file
         
