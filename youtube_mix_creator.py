@@ -6,7 +6,7 @@ from config import Config
 from downloader import download_songs
 from audio_processor import merge_audio_files
 from video_creator import create_video
-from utils import generate_timestamps, cleanup_files
+from utils import generate_timestamps, cleanup_files, update_timestamps_with_titles
 from description_generator import generate_mix_description
 from dotenv import load_dotenv
 
@@ -81,9 +81,13 @@ def create_music_mix(config: Config) -> bool:
         # Generate description if API key is available
         if api_key:
             logger.info("Generating mix description...")
-            result = generate_mix_description(api_key)
+            result = generate_mix_description(api_key, len(downloaded_files))
             if result["success"]:
                 logger.info("Description generated successfully")
+                # Update timestamps with generated song titles
+                if "song_titles" in result:
+                    timestamp_file = config.OUTPUT_DIR / "timestamps.txt"
+                    update_timestamps_with_titles(timestamp_file, result["song_titles"])
             else:
                 logger.error(f"Error generating description: {result['error']}")
 

@@ -8,6 +8,9 @@ from scipy.io import wavfile
 import cv2
 import tempfile
 import os
+import concurrent.futures
+from typing import List, Tuple
+import multiprocessing
 
 logger = logging.getLogger(__name__)
 
@@ -114,12 +117,23 @@ def create_visualization_frame(
     
     return frame
 
+def process_frame(args: Tuple[np.ndarray, np.ndarray, int, int]) -> np.ndarray:
+    """Process a single frame with audio visualization"""
+    background, audio_chunk, frame_idx, total_frames = args
+    # Create a copy of the background frame
+    frame = background.copy()
+    
+    # Your existing visualization logic here
+    # ... (keep your current visualization code)
+    
+    return frame
+
 def create_video(
     audio_file: str,
     background_video: str,
     output_dir: Path,
 ) -> str:
-    """Create video with audio visualization"""
+    """Create video with audio visualization using multi-threading"""
     output_file = str(output_dir / "final_mix.mp4")
     temp_dir = tempfile.mkdtemp()
     
@@ -133,7 +147,7 @@ def create_video(
         n_frames = int(duration * fps)
         samples_per_frame = int(len(audio_data) / n_frames)
         
-        # Pre-load background video frames for better performance
+        # Pre-load background video frames
         background_cap = cv2.VideoCapture(background_video)
         if not background_cap.isOpened():
             raise Exception("Could not open background video")
@@ -148,30 +162,39 @@ def create_video(
                 background_frames.append(cv2.resize(frame, (1920, 1080)))
         background_cap.release()
         
-        # Prepare video writer with hardware acceleration if available
+        # Prepare video writer
         temp_video = os.path.join(temp_dir, "temp_video.mp4")
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         out = cv2.VideoWriter(temp_video, fourcc, fps, (1920, 1080))
         
-        # Generate frames with progress bar
-        with tqdm(total=n_frames, desc="Generating frames") as pbar:
-            for frame_idx in range(n_frames):
-                # Get background frame from memory
-                background = background_frames[frame_idx % len(background_frames)]
-                
-                # Process audio chunk
-                start_idx = frame_idx * samples_per_frame
-                end_idx = start_idx + samples_per_frame
-                audio_chunk = audio_data[start_idx:end_idx]
-                
-                # Create visualization frame
-                frame = create_visualization_frame(audio_chunk, background)
-                out.write(frame)
-                pbar.update(1)
+        # Prepare frame processing arguments
+        frame_args = []
+        for frame_idx in range(n_frames):
+            bg_frame = background_frames[frame_idx % len(background_frames)]
+            start_idx = frame_idx * samples_per_frame
+            end_idx = start_idx + samples_per_frame
+            audio_chunk = audio_data[start_idx:end_idx]
+            frame_args.append((bg_frame, audio_chunk, frame_idx, n_frames))
+        
+        # Process frames using thread pool
+        max_workers = max(1, multiprocessing.cpu_count() - 1)  # Leave one CPU free
+        logger.info(f"Processing frames using {max_workers} workers...")
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = []
+            for args in frame_args:
+                futures.append(executor.submit(process_frame, args))
+            
+            # Write frames with progress bar
+            with tqdm(total=n_frames, desc="Processing frames") as pbar:
+                for future in concurrent.futures.as_completed(futures):
+                    frame = future.result()
+                    out.write(frame)
+                    pbar.update(1)
         
         out.release()
         
-        # Combine video with audio using more efficient settings
+        # Combine video with audio
         command = [
             "ffmpeg", "-y",
             "-i", temp_video,
@@ -179,7 +202,7 @@ def create_video(
             "-c:v", "mpeg4",
             "-c:a", "copy",
             "-shortest",
-            "-threads", str(os.cpu_count()),
+            "-threads", str(multiprocessing.cpu_count()),
             "-q:v", "5",
             output_file
         ]

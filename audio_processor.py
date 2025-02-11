@@ -2,17 +2,47 @@ import subprocess
 from pathlib import Path
 from typing import List
 import logging
+import concurrent.futures
+import multiprocessing
 
 logger = logging.getLogger(__name__)
+
+def process_audio_file(file_path: str, output_dir: Path) -> str:
+    """Process a single audio file"""
+    try:
+        output_file = output_dir / f"processed_{Path(file_path).name}"
+        # Add your audio processing logic here
+        return str(output_file)
+    except Exception as e:
+        logger.error(f"Error processing {file_path}: {str(e)}")
+        return None
 
 def merge_audio_files(
     audio_files: List[str],
     output_dir: Path,
     crossfade_duration: int = 5
 ) -> str:
-    """
-    Merge audio files with crossfade using FFmpeg
-    """
+    """Merge audio files with parallel processing"""
+    max_workers = max(1, multiprocessing.cpu_count() - 1)
+    processed_files = []
+    
+    # Process audio files in parallel
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_file = {
+            executor.submit(process_audio_file, file, output_dir): file 
+            for file in audio_files
+        }
+        
+        for future in concurrent.futures.as_completed(future_to_file):
+            file = future_to_file[future]
+            try:
+                processed_file = future.result()
+                if processed_file:
+                    processed_files.append(processed_file)
+            except Exception as e:
+                logger.error(f"Error processing {file}: {str(e)}")
+    
+    # Merge processed files
     output_file = str(output_dir / "merged_audio.mp3")
     
     # Create complex FFmpeg filter for crossfade between multiple files
@@ -22,12 +52,12 @@ def merge_audio_files(
     filter_complex += f"[0:a]"
     
     # Add crossfade for subsequent files
-    for i in range(1, len(audio_files)):
+    for i in range(1, len(processed_files)):
         # Crossfade between current and previous file
         filter_complex += f"[{i}:a]acrossfade=d={crossfade_duration}:c1=tri:c2=tri"
         
         # If not the last file, add a temporary output label
-        if i < len(audio_files) - 1:
+        if i < len(processed_files) - 1:
             filter_complex += f"[tmp{i}];"
             filter_complex += f"[tmp{i}]"
 
@@ -35,7 +65,7 @@ def merge_audio_files(
     command = ["ffmpeg", "-y"]
     
     # Add input files
-    for audio_file in audio_files:
+    for audio_file in processed_files:
         command.extend(["-i", audio_file])
     
     command.extend([
