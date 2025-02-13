@@ -6,7 +6,7 @@ from config import Config
 from downloader import download_songs
 from audio_processor import merge_audio_files
 from video_creator import create_video
-from utils import generate_timestamps, cleanup_files, update_timestamps_with_titles
+from utils import generate_timestamps, cleanup_files, update_timestamps_with_titles, rename_audio_files
 from description_generator import generate_mix_description, update_description_with_timestamps
 from dotenv import load_dotenv
 
@@ -21,18 +21,48 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 api_key = os.getenv("PERPLEXITY_API_KEY")
 
+def get_matching_output_paths(output_dir: Path) -> tuple[Path, Path, Path]:
+    """Generate matching output paths for video, timestamps, and description"""
+    counter = 1
+    while True:
+        # Check if this number is already used
+        video_path = output_dir / f"final_mix_{counter}.mp4"
+        if not video_path.exists():
+            # Found an unused number, create matching paths
+            timestamp_path = output_dir / f"timestamps_{counter}.txt"
+            description_path = output_dir / f"mix_description_{counter}.txt"
+            return video_path, timestamp_path, description_path
+        counter += 1
+
+def get_genre_input() -> str:
+    """Prompt user for music genre"""
+    print("\nAvailable genres examples:")
+    print("- lofi jazz")
+    print("- ambient electronic")
+    print("- chill hip hop")
+    print("- synthwave")
+    print("- piano ambient")
+    return input("\nEnter the genre for your mix: ").strip()
+
 def create_music_mix(config: Config) -> bool:
     """
     Main function to create a music mix video
     """
     try:
+        # Get genre from user
+        genre = get_genre_input()
+        
         # Create output directories if they don't exist
         os.makedirs(config.TEMP_DIR, exist_ok=True)
         os.makedirs(config.OUTPUT_DIR, exist_ok=True)
+        os.makedirs(config.BACKGROUNDS_DIR, exist_ok=True)
+
+        # Generate matching output paths
+        video_output, timestamp_output, description_output = get_matching_output_paths(config.OUTPUT_DIR)
 
         # Check if we have any songs to process
         if not config.song_urls:
-            logger.error("No songs found in song_list.txt")
+            logger.error("No songs found in audio directory")
             return False
 
         # Step 1: Download songs
@@ -62,15 +92,15 @@ def create_music_mix(config: Config) -> bool:
         logger.info("Creating video...")
         final_video = create_video(
             merged_audio,
-            config.BACKGROUND_VIDEO,
+            config.background_video,
             config.OUTPUT_DIR,
+            video_output.name
         )
 
         # Write timestamps to file
-        timestamp_file = config.OUTPUT_DIR / "timestamps.txt"
-        with open(timestamp_file, "w", encoding="utf-8") as f:
+        with open(timestamp_output, "w", encoding="utf-8") as f:
             f.write(timestamps)
-        logger.info(f"Timestamps written to {timestamp_file}")
+        logger.info(f"Timestamps written to {timestamp_output}")
 
         # Cleanup temporary files
         if config.CLEANUP_TEMP:
@@ -78,21 +108,19 @@ def create_music_mix(config: Config) -> bool:
 
         logger.info(f"Music mix video created successfully: {final_video}")
 
-        # Generate description if API key is available
-        if api_key:
+        # Generate description if API key is available and genre is not "test"
+        if api_key and genre.lower() != "test":
             logger.info("Generating mix description...")
-            result = generate_mix_description(api_key, len(downloaded_files))
+            result = generate_mix_description(api_key, len(downloaded_files), genre)
             if result["success"]:
                 logger.info("Description generated successfully")
-                # Update timestamps with generated song titles
                 if "song_titles" in result:
-                    timestamp_file = config.OUTPUT_DIR / "timestamps.txt"
-                    if update_timestamps_with_titles(timestamp_file, result["song_titles"]):
-                        # Update description with timestamps
-                        description_file = config.OUTPUT_DIR / "mix_description.txt"
-                        update_description_with_timestamps(description_file, timestamp_file)
+                    if update_timestamps_with_titles(timestamp_output, result["song_titles"]):
+                        update_description_with_timestamps(description_output, timestamp_output)
             else:
                 logger.error(f"Error generating description: {result['error']}")
+        else:
+            logger.info("Skipping description generation (test mode)")
 
         return True
 

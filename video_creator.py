@@ -119,9 +119,10 @@ def create_video(
     audio_file: str,
     background_video: str,
     output_dir: Path,
+    output_filename: str = "final_mix.mp4"
 ) -> str:
     """Create video with audio visualization"""
-    output_file = str(output_dir / "final_mix.mp4")
+    output_file = str(output_dir / output_filename)
     temp_dir = tempfile.mkdtemp()
     
     try:
@@ -242,4 +243,55 @@ def create_video(
         # Cleanup temporary directory
         for file in os.listdir(temp_dir):
             os.remove(os.path.join(temp_dir, file))
-        os.rmdir(temp_dir) 
+        os.rmdir(temp_dir)
+
+def convert_gif_to_mp4(gif_path: Path, temp_dir: Path) -> str:
+    """Convert GIF to MP4 for use as background"""
+    output_path = temp_dir / "bg_converted.mp4"
+    
+    # First try with libx264
+    command_x264 = [
+        "ffmpeg", "-y",
+        "-i", str(gif_path),
+        "-movflags", "faststart",
+        "-pix_fmt", "yuv420p",
+        "-vf", "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2",
+        "-r", "30",
+        "-c:v", "libx264",
+        "-preset", "medium",
+        "-crf", "23",
+        str(output_path)
+    ]
+    
+    # Fallback command using MPEG4 codec
+    command_mpeg4 = [
+        "ffmpeg", "-y",
+        "-i", str(gif_path),
+        "-movflags", "faststart",
+        "-pix_fmt", "yuv420p",
+        "-vf", "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2",
+        "-r", "30",
+        "-c:v", "mpeg4",
+        "-q:v", "6",
+        str(output_path)
+    ]
+    
+    try:
+        logger.info("Converting GIF to MP4...")
+        try:
+            # Try libx264 first
+            subprocess.run(command_x264, check=True, capture_output=True)
+        except subprocess.CalledProcessError:
+            logger.info("libx264 not available, trying MPEG4 codec...")
+            # If that fails, try MPEG4
+            subprocess.run(command_mpeg4, check=True, capture_output=True)
+            
+        logger.info("GIF conversion successful")
+        return str(output_path)
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Error converting GIF to MP4: {e.stderr.decode()}")
+        logger.info("Please install FFmpeg with x264 support: sudo apt-get install ffmpeg x264 libx264-dev")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error converting GIF to MP4: {str(e)}")
+        raise 

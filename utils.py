@@ -84,4 +84,33 @@ def update_timestamps_with_titles(timestamps_file: Path, song_titles: List[str])
         
     except Exception as e:
         logger.error(f"Error updating timestamps: {str(e)}")
+        return False
+
+def rename_audio_files(audio_dir: Path, original_files: List[str], song_titles: List[str]) -> bool:
+    """Rename audio files in the audio directory with generated titles"""
+    try:
+        if len(original_files) != len(song_titles):
+            logger.error("Number of files doesn't match number of titles")
+            return False
+            
+        for original_file, new_title in zip(original_files, song_titles):
+            # Get original file path
+            original_path = Path(original_file)
+            
+            # Create safe filename from new title
+            safe_title = "".join(c for c in new_title if c.isalnum() or c in (' ', '-', '_')).strip()
+            safe_title = safe_title.replace(' ', '_')
+            
+            # Create new path with original extension
+            new_path = audio_dir / f"{safe_title}{original_path.suffix}"
+            
+            # Rename the file
+            if original_path.exists():
+                original_path.rename(new_path)
+                logger.info(f"Renamed: {original_path.name} -> {new_path.name}")
+            
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error renaming audio files: {str(e)}")
         return False 
