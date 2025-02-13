@@ -62,24 +62,25 @@ def create_visualization_frame(
     height: int = 1080,
     width: int = 1920,
     n_bars: int = 128,
-    bar_color: tuple = (255, 255, 255)
+    gradient_start: tuple = (0, 191, 255),    # Deep Sky Blue
+    gradient_end: tuple = (135, 206, 250)     # Light Sky Blue
 ) -> np.ndarray:
     """Create a single frame with audio visualization bars"""
-    frame = background.copy()
+    # Create a black background for the visualization
+    vis_overlay = np.zeros((height, width, 3), dtype=np.uint8)
+    glow_overlay = np.zeros((height, width, 3), dtype=np.uint8)
     
     # Calculate bar positions and dimensions
     bar_width = int(width / (n_bars * 1.5))
     bar_spacing = int(width / n_bars)
-    max_bar_height = int(height * 0.2)
+    max_bar_height = int(height * 0.25)  # Made bars slightly taller
     corner_radius = min(bar_width // 2, 3)
     
-    # Process audio chunk for visualization using vectorized operations
+    # Process audio chunk for visualization
     if len(audio_chunk) > 0:
-        # Use numpy's optimized FFT
         spectrum = np.abs(np.fft.fft(audio_chunk))[:n_bars]
         weights = np.linspace(1.0, 3.0, n_bars)
         spectrum = spectrum * weights
-        # Vectorized normalization
         spectrum = np.clip(spectrum / np.max(spectrum) if np.max(spectrum) > 0 else spectrum, 0.01, 1.0)
         bar_heights = np.maximum(spectrum * max_bar_height, 4).astype(np.int32)
     else:
@@ -89,29 +90,39 @@ def create_visualization_frame(
     start_x = (width - (n_bars * bar_spacing)) // 2
     x_positions = np.arange(n_bars) * bar_spacing + start_x
     
-    # Create visualization overlay
-    vis_overlay = np.zeros((height, width, 3), dtype=np.uint8)
-    glow_overlay = np.zeros((height, width, 3), dtype=np.uint8)
-    
-    # Vectorized bar drawing
+    # Draw bars with alpha channel for better visibility
     for i in range(n_bars):
+        gradient_factor = bar_heights[i] / max_bar_height
+        # BGR format for OpenCV
+        bar_color = tuple(int(start + (end - start) * gradient_factor) 
+                         for start, end in zip(gradient_start, gradient_end))
+        
         x1, x2 = x_positions[i], x_positions[i] + bar_width
         y1 = height - bar_heights[i] - 30
         y2 = height - 30
         
-        # Main bar
-        cv2.rectangle(vis_overlay, (x1, y1), (x2, y2), bar_color, -1, cv2.LINE_AA)
+        # Draw bars with increased opacity
+        cv2.rectangle(vis_overlay, (x1, y1 + corner_radius), (x2, y2 - corner_radius), bar_color, -1, cv2.LINE_AA)
+        cv2.rectangle(vis_overlay, (x1 + corner_radius, y1), (x2 - corner_radius, y2), bar_color, -1, cv2.LINE_AA)
         
-        # Glow
+        # Rounded corners
+        cv2.circle(vis_overlay, (x1 + corner_radius, y1 + corner_radius), corner_radius, bar_color, -1, cv2.LINE_AA)
+        cv2.circle(vis_overlay, (x2 - corner_radius, y1 + corner_radius), corner_radius, bar_color, -1, cv2.LINE_AA)
+        cv2.circle(vis_overlay, (x1 + corner_radius, y2 - corner_radius), corner_radius, bar_color, -1, cv2.LINE_AA)
+        cv2.circle(vis_overlay, (x2 - corner_radius, y2 - corner_radius), corner_radius, bar_color, -1, cv2.LINE_AA)
+        
+        # Enhanced glow effect with brighter glow
+        glow_color = tuple(min(int(c * 1.8), 255) for c in bar_color)  # Increased brightness
         cv2.rectangle(glow_overlay, (x1-4, y1-4), (x2+4, y2+4), 
-                     tuple(map(lambda x: x//4, bar_color)), -1, cv2.LINE_AA)
+                     tuple(c//2 for c in glow_color), -1, cv2.LINE_AA)  # Increased glow opacity
     
-    # Apply optimized glow effect
+    # Apply enhanced glow effect
     glow_overlay = cv2.GaussianBlur(glow_overlay, (21, 21), 11)
     
-    # Combine layers efficiently
-    frame = cv2.addWeighted(frame, 1.0, glow_overlay, 0.3, 0)
-    frame = cv2.addWeighted(frame, 1.0, vis_overlay, 1.0, 0)
+    # Combine layers with proper alpha blending
+    frame = background.copy()
+    frame = cv2.addWeighted(frame, 0.7, glow_overlay, 0.6, 0)  # Increased glow intensity and dimmed background
+    frame = cv2.addWeighted(frame, 0.7, vis_overlay, 1.0, 0)   # Make bars more visible
     
     return frame
 
@@ -249,13 +260,19 @@ def convert_gif_to_mp4(gif_path: Path, temp_dir: Path) -> str:
     """Convert GIF to MP4 for use as background"""
     output_path = temp_dir / "bg_converted.mp4"
     
+    # Common video filter settings for proper scaling and padding
+    video_filters = [
+        "scale=1920:1080:force_original_aspect_ratio=decrease",  # Scale while maintaining aspect ratio
+        "pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black",  # Center and pad with black
+        "format=yuv420p"  # Ensure compatible color format
+    ]
+    
     # First try with libx264
     command_x264 = [
         "ffmpeg", "-y",
         "-i", str(gif_path),
         "-movflags", "faststart",
-        "-pix_fmt", "yuv420p",
-        "-vf", "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2",
+        "-vf", ",".join(video_filters),
         "-r", "30",
         "-c:v", "libx264",
         "-preset", "medium",
@@ -268,8 +285,7 @@ def convert_gif_to_mp4(gif_path: Path, temp_dir: Path) -> str:
         "ffmpeg", "-y",
         "-i", str(gif_path),
         "-movflags", "faststart",
-        "-pix_fmt", "yuv420p",
-        "-vf", "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2",
+        "-vf", ",".join(video_filters),
         "-r", "30",
         "-c:v", "mpeg4",
         "-q:v", "6",
@@ -279,11 +295,9 @@ def convert_gif_to_mp4(gif_path: Path, temp_dir: Path) -> str:
     try:
         logger.info("Converting GIF to MP4...")
         try:
-            # Try libx264 first
             subprocess.run(command_x264, check=True, capture_output=True)
         except subprocess.CalledProcessError:
             logger.info("libx264 not available, trying MPEG4 codec...")
-            # If that fails, try MPEG4
             subprocess.run(command_mpeg4, check=True, capture_output=True)
             
         logger.info("GIF conversion successful")
