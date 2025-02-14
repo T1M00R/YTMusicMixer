@@ -62,8 +62,8 @@ def create_visualization_frame(
     height: int = 1080,
     width: int = 1920,
     n_bars: int = 128,
-    gradient_start: tuple = (255, 130, 238),  # BGR: Pink/Purple
-    gradient_end: tuple = (225, 105, 65)      # BGR: Blue
+    gradient_start: tuple = (0, 191, 255),    # Deep Sky Blue
+    gradient_end: tuple = (135, 206, 250)     # Light Sky Blue
 ) -> np.ndarray:
     """Create a single frame with audio visualization bars"""
     # Create a black background for the visualization
@@ -73,7 +73,7 @@ def create_visualization_frame(
     # Calculate bar positions and dimensions
     bar_width = int(width / (n_bars * 1.5))
     bar_spacing = int(width / n_bars)
-    max_bar_height = int(height * 0.25)
+    max_bar_height = int(height * 0.25)  # Made bars slightly taller
     corner_radius = min(bar_width // 2, 3)
     
     # Process audio chunk for visualization
@@ -90,9 +90,6 @@ def create_visualization_frame(
     start_x = (width - (n_bars * bar_spacing)) // 2
     x_positions = np.arange(n_bars) * bar_spacing + start_x
     
-    # Create a white mask for the bars
-    bar_mask = np.zeros((height, width), dtype=np.uint8)
-    
     # Draw bars with alpha channel for better visibility
     for i in range(n_bars):
         gradient_factor = bar_heights[i] / max_bar_height
@@ -104,13 +101,9 @@ def create_visualization_frame(
         y1 = height - bar_heights[i] - 30
         y2 = height - 30
         
-        # Draw bars on both the overlay and mask
+        # Draw bars with increased opacity
         cv2.rectangle(vis_overlay, (x1, y1 + corner_radius), (x2, y2 - corner_radius), bar_color, -1, cv2.LINE_AA)
         cv2.rectangle(vis_overlay, (x1 + corner_radius, y1), (x2 - corner_radius, y2), bar_color, -1, cv2.LINE_AA)
-        
-        # Draw on mask
-        cv2.rectangle(bar_mask, (x1, y1 + corner_radius), (x2, y2 - corner_radius), 255, -1, cv2.LINE_AA)
-        cv2.rectangle(bar_mask, (x1 + corner_radius, y1), (x2 - corner_radius, y2), 255, -1, cv2.LINE_AA)
         
         # Rounded corners
         cv2.circle(vis_overlay, (x1 + corner_radius, y1 + corner_radius), corner_radius, bar_color, -1, cv2.LINE_AA)
@@ -118,31 +111,20 @@ def create_visualization_frame(
         cv2.circle(vis_overlay, (x1 + corner_radius, y2 - corner_radius), corner_radius, bar_color, -1, cv2.LINE_AA)
         cv2.circle(vis_overlay, (x2 - corner_radius, y2 - corner_radius), corner_radius, bar_color, -1, cv2.LINE_AA)
         
-        # Draw rounded corners on mask
-        cv2.circle(bar_mask, (x1 + corner_radius, y1 + corner_radius), corner_radius, 255, -1, cv2.LINE_AA)
-        cv2.circle(bar_mask, (x2 - corner_radius, y1 + corner_radius), corner_radius, 255, -1, cv2.LINE_AA)
-        cv2.circle(bar_mask, (x1 + corner_radius, y2 - corner_radius), corner_radius, 255, -1, cv2.LINE_AA)
-        cv2.circle(bar_mask, (x2 - corner_radius, y2 - corner_radius), corner_radius, 255, -1, cv2.LINE_AA)
-        
         # Enhanced glow effect with brighter glow
-        glow_color = tuple(min(int(c * 1.8), 255) for c in bar_color)
+        glow_color = tuple(min(int(c * 1.8), 255) for c in bar_color)  # Increased brightness
         cv2.rectangle(glow_overlay, (x1-4, y1-4), (x2+4, y2+4), 
-                     tuple(c//2 for c in glow_color), -1, cv2.LINE_AA)
+                     tuple(c//2 for c in glow_color), -1, cv2.LINE_AA)  # Increased glow opacity
     
     # Apply enhanced glow effect
     glow_overlay = cv2.GaussianBlur(glow_overlay, (21, 21), 11)
     
-    # Convert mask to 3 channel
-    bar_mask_3ch = cv2.cvtColor(bar_mask, cv2.COLOR_GRAY2BGR) / 255.0
-    
     # Combine layers with proper alpha blending
     frame = background.copy()
-    frame = cv2.addWeighted(frame, 0.95, glow_overlay, 0.3, 0)
+    frame = cv2.addWeighted(frame, 0.7, glow_overlay, 0.6, 0)  # Increased glow intensity and dimmed background
+    frame = cv2.addWeighted(frame, 0.7, vis_overlay, 1.0, 0)   # Make bars more visible
     
-    # Apply the visualization using the mask
-    frame = frame * (1 - bar_mask_3ch) + vis_overlay * bar_mask_3ch
-    
-    return frame.astype(np.uint8)
+    return frame
 
 def create_video(
     audio_file: str,
@@ -178,9 +160,7 @@ def create_video(
             for _ in range(total_bg_frames):
                 ret, frame = background_cap.read()
                 if ret:
-                    # Stretch frame to fill screen
-                    frame = cv2.resize(frame, (1920, 1080), interpolation=cv2.INTER_LINEAR)
-                    background_frames.append(frame)
+                    background_frames.append(cv2.resize(frame, (1920, 1080)))
                 pbar.update(1)
         background_cap.release()
         
@@ -280,11 +260,10 @@ def convert_gif_to_mp4(gif_path: Path, temp_dir: Path) -> str:
     """Convert GIF to MP4 for use as background"""
     output_path = temp_dir / "bg_converted.mp4"
     
-    # Video filter to stretch to fill screen without maintaining aspect ratio
+    # Updated video filter settings to stretch to full screen
     video_filters = [
-        "scale=1920:1080",  # Force scale to full size
-        "setsar=1:1",       # Set aspect ratio
-        "format=yuv420p"    # Ensure compatible color format
+        "scale=1920:1080:force_original_aspect_ratio=disable",  # Force stretch to exact dimensions
+        "format=yuv420p"  # Ensure compatible color format
     ]
     
     # First try with libx264
@@ -324,6 +303,7 @@ def convert_gif_to_mp4(gif_path: Path, temp_dir: Path) -> str:
         return str(output_path)
     except subprocess.CalledProcessError as e:
         logger.error(f"Error converting GIF to MP4: {e.stderr.decode()}")
+        logger.info("Please install FFmpeg with x264 support: sudo apt-get install ffmpeg x264 libx264-dev")
         raise
     except Exception as e:
         logger.error(f"Unexpected error converting GIF to MP4: {str(e)}")
