@@ -62,8 +62,8 @@ def create_visualization_frame(
     height: int = 1080,
     width: int = 1920,
     n_bars: int = 128,
-    gradient_start: tuple = (0, 191, 255),    # Deep Sky Blue
-    gradient_end: tuple = (135, 206, 250)     # Light Sky Blue
+    gradient_start: tuple = (255, 130, 238),  # BGR: Pink/Purple
+    gradient_end: tuple = (225, 105, 65)      # BGR: Blue
 ) -> np.ndarray:
     """Create a single frame with audio visualization bars"""
     # Create a black background for the visualization
@@ -73,7 +73,7 @@ def create_visualization_frame(
     # Calculate bar positions and dimensions
     bar_width = int(width / (n_bars * 1.5))
     bar_spacing = int(width / n_bars)
-    max_bar_height = int(height * 0.25)  # Made bars slightly taller
+    max_bar_height = int(height * 0.25)
     corner_radius = min(bar_width // 2, 3)
     
     # Process audio chunk for visualization
@@ -112,17 +112,17 @@ def create_visualization_frame(
         cv2.circle(vis_overlay, (x2 - corner_radius, y2 - corner_radius), corner_radius, bar_color, -1, cv2.LINE_AA)
         
         # Enhanced glow effect with brighter glow
-        glow_color = tuple(min(int(c * 1.8), 255) for c in bar_color)  # Increased brightness
+        glow_color = tuple(min(int(c * 1.8), 255) for c in bar_color)
         cv2.rectangle(glow_overlay, (x1-4, y1-4), (x2+4, y2+4), 
-                     tuple(c//2 for c in glow_color), -1, cv2.LINE_AA)  # Increased glow opacity
+                     tuple(c//2 for c in glow_color), -1, cv2.LINE_AA)
     
     # Apply enhanced glow effect
     glow_overlay = cv2.GaussianBlur(glow_overlay, (21, 21), 11)
     
     # Combine layers with proper alpha blending
     frame = background.copy()
-    frame = cv2.addWeighted(frame, 0.7, glow_overlay, 0.6, 0)  # Increased glow intensity and dimmed background
-    frame = cv2.addWeighted(frame, 0.7, vis_overlay, 1.0, 0)   # Make bars more visible
+    frame = cv2.addWeighted(frame, 0.95, glow_overlay, 0.3, 0)  # More subtle glow
+    frame = cv2.addWeighted(frame, 0.95, vis_overlay, 1.0, 0)   # Preserve bar colors better
     
     return frame
 
