@@ -90,6 +90,9 @@ def create_visualization_frame(
     start_x = (width - (n_bars * bar_spacing)) // 2
     x_positions = np.arange(n_bars) * bar_spacing + start_x
     
+    # Create a white mask for the bars
+    bar_mask = np.zeros((height, width), dtype=np.uint8)
+    
     # Draw bars with alpha channel for better visibility
     for i in range(n_bars):
         gradient_factor = bar_heights[i] / max_bar_height
@@ -101,15 +104,25 @@ def create_visualization_frame(
         y1 = height - bar_heights[i] - 30
         y2 = height - 30
         
-        # Draw bars with increased opacity
+        # Draw bars on both the overlay and mask
         cv2.rectangle(vis_overlay, (x1, y1 + corner_radius), (x2, y2 - corner_radius), bar_color, -1, cv2.LINE_AA)
         cv2.rectangle(vis_overlay, (x1 + corner_radius, y1), (x2 - corner_radius, y2), bar_color, -1, cv2.LINE_AA)
+        
+        # Draw on mask
+        cv2.rectangle(bar_mask, (x1, y1 + corner_radius), (x2, y2 - corner_radius), 255, -1, cv2.LINE_AA)
+        cv2.rectangle(bar_mask, (x1 + corner_radius, y1), (x2 - corner_radius, y2), 255, -1, cv2.LINE_AA)
         
         # Rounded corners
         cv2.circle(vis_overlay, (x1 + corner_radius, y1 + corner_radius), corner_radius, bar_color, -1, cv2.LINE_AA)
         cv2.circle(vis_overlay, (x2 - corner_radius, y1 + corner_radius), corner_radius, bar_color, -1, cv2.LINE_AA)
         cv2.circle(vis_overlay, (x1 + corner_radius, y2 - corner_radius), corner_radius, bar_color, -1, cv2.LINE_AA)
         cv2.circle(vis_overlay, (x2 - corner_radius, y2 - corner_radius), corner_radius, bar_color, -1, cv2.LINE_AA)
+        
+        # Draw rounded corners on mask
+        cv2.circle(bar_mask, (x1 + corner_radius, y1 + corner_radius), corner_radius, 255, -1, cv2.LINE_AA)
+        cv2.circle(bar_mask, (x2 - corner_radius, y1 + corner_radius), corner_radius, 255, -1, cv2.LINE_AA)
+        cv2.circle(bar_mask, (x1 + corner_radius, y2 - corner_radius), corner_radius, 255, -1, cv2.LINE_AA)
+        cv2.circle(bar_mask, (x2 - corner_radius, y2 - corner_radius), corner_radius, 255, -1, cv2.LINE_AA)
         
         # Enhanced glow effect with brighter glow
         glow_color = tuple(min(int(c * 1.8), 255) for c in bar_color)
@@ -119,12 +132,17 @@ def create_visualization_frame(
     # Apply enhanced glow effect
     glow_overlay = cv2.GaussianBlur(glow_overlay, (21, 21), 11)
     
+    # Convert mask to 3 channel
+    bar_mask_3ch = cv2.cvtColor(bar_mask, cv2.COLOR_GRAY2BGR) / 255.0
+    
     # Combine layers with proper alpha blending
     frame = background.copy()
-    frame = cv2.addWeighted(frame, 0.95, glow_overlay, 0.3, 0)  # More subtle glow
-    frame = cv2.addWeighted(frame, 0.95, vis_overlay, 1.0, 0)   # Preserve bar colors better
+    frame = cv2.addWeighted(frame, 0.95, glow_overlay, 0.3, 0)
     
-    return frame
+    # Apply the visualization using the mask
+    frame = frame * (1 - bar_mask_3ch) + vis_overlay * bar_mask_3ch
+    
+    return frame.astype(np.uint8)
 
 def create_video(
     audio_file: str,
