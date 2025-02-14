@@ -178,7 +178,9 @@ def create_video(
             for _ in range(total_bg_frames):
                 ret, frame = background_cap.read()
                 if ret:
-                    background_frames.append(cv2.resize(frame, (1920, 1080)))
+                    # Stretch frame to fill screen
+                    frame = cv2.resize(frame, (1920, 1080), interpolation=cv2.INTER_LINEAR)
+                    background_frames.append(frame)
                 pbar.update(1)
         background_cap.release()
         
@@ -278,11 +280,11 @@ def convert_gif_to_mp4(gif_path: Path, temp_dir: Path) -> str:
     """Convert GIF to MP4 for use as background"""
     output_path = temp_dir / "bg_converted.mp4"
     
-    # Common video filter settings for proper scaling and padding
+    # Video filter to stretch to fill screen without maintaining aspect ratio
     video_filters = [
-        "scale=1920:1080:force_original_aspect_ratio=decrease",  # Scale while maintaining aspect ratio
-        "pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black",  # Center and pad with black
-        "format=yuv420p"  # Ensure compatible color format
+        "scale=1920:1080",  # Force scale to full size
+        "setsar=1:1",       # Set aspect ratio
+        "format=yuv420p"    # Ensure compatible color format
     ]
     
     # First try with libx264
@@ -322,7 +324,6 @@ def convert_gif_to_mp4(gif_path: Path, temp_dir: Path) -> str:
         return str(output_path)
     except subprocess.CalledProcessError as e:
         logger.error(f"Error converting GIF to MP4: {e.stderr.decode()}")
-        logger.info("Please install FFmpeg with x264 support: sudo apt-get install ffmpeg x264 libx264-dev")
         raise
     except Exception as e:
         logger.error(f"Unexpected error converting GIF to MP4: {str(e)}")
