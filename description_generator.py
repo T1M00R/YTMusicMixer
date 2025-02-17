@@ -20,35 +20,51 @@ def generate_mix_description(api_key: str, num_songs: int, genre: str = "lofi ja
         "messages": [
             {
                 "role": "system",
-                "content": "You are a creative music description writer. Be engaging and specific."
+                "content": """You are a music channel creator writing YouTube descriptions.
+                Write in a casual, authentic voice - like a real person sharing their favorite music.
+                Avoid overly poetic or AI-sounding language.
+                Keep it simple and genuine, like talking to a friend."""
             },
             {
                 "role": "user",
-                "content": f"""Create a YouTube music mix description package with the following format:
+                "content": f"""Create a YouTube music mix description package. Use this exact format with spacers:
 
-1. A captivating paragraph description for a {genre} mix that mentions the mood, instruments, and ideal listening scenarios
-2. 10 CSV tags optimized for music platforms
-3. Exactly {num_songs} creative song titles that fit the genre (this is important!)
+Thank you for tuning in! :D 
+[Optional: Add a personal note about the background video/art]
 
-Format the response exactly like this example:
-Description:
-[paragraph description]
+. . . . . . . . . . . . . . . . . . . . 
+
+[Write a short, natural description for this {genre} mix. Focus on:
+- What makes this mix special
+- When/where to listen to it
+- Keep it casual and authentic, like a real person wrote it
+- Avoid flowery/poetic language
+- 2-3 sentences max]
+
+. . . . . . . . . . . . . . . . . . . . 
 
 Tags:
-[tag1],[tag2],[tag3],...
+[tag1],[tag2],[tag3],... (15 tags max)
+
+. . . . . . . . . . . . . . . . . . . . 
 
 Song Titles:
 1. [Title 1]
 2. [Title 2]
-...etc"""
+...etc
+
+Important rules for titles:
+- Create exactly {num_songs} unique titles
+- Each title must be completely different
+- No repeating words or themes
+- Mix different concepts (nature, urban, emotions, time)
+- Keep titles memorable but natural"""
             }
         ],
         "max_tokens": 500,
-        "temperature": 0.7,
-        "top_p": 0.9,
-        "stream": False,
-        "presence_penalty": 0,
-        "frequency_penalty": 0.5
+        "temperature": 0.9,
+        "top_p": 0.95,
+        "presence_penalty": 0.8
     }
 
     try:
@@ -70,13 +86,7 @@ Song Titles:
         # Extract song titles
         song_titles = extract_song_titles(content)
         
-        # Save the response
-        output_dir = Path("output")
-        output_dir.mkdir(exist_ok=True)
-        
-        with open(output_dir / "mix_description.txt", "w", encoding="utf-8") as f:
-            f.write(content)
-            
+        # Don't save the file here anymore, just return the content
         return {
             "success": True, 
             "content": content,

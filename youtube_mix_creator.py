@@ -114,6 +114,11 @@ def create_music_mix(config: Config) -> bool:
             result = generate_mix_description(api_key, len(downloaded_files), genre)
             if result["success"]:
                 logger.info("Description generated successfully")
+                
+                # Write description content to the correct numbered file
+                with open(description_output, "w", encoding="utf-8") as f:
+                    f.write(result["content"])
+                
                 if "song_titles" in result:
                     if update_timestamps_with_titles(timestamp_output, result["song_titles"]):
                         update_description_with_timestamps(description_output, timestamp_output)

@@ -73,16 +73,56 @@ def create_visualization_frame(
     # Calculate bar positions and dimensions
     bar_width = int(width / (n_bars * 1.5))
     bar_spacing = int(width / n_bars)
-    max_bar_height = int(height * 0.25)  # Made bars slightly taller
+    max_bar_height = int(height * 0.25)
     corner_radius = min(bar_width // 2, 3)
     
-    # Process audio chunk for visualization
+    # Improved audio processing for better sync
     if len(audio_chunk) > 0:
+        # Apply window function to reduce edge artifacts
+        window = np.hanning(len(audio_chunk))
+        audio_chunk = audio_chunk * window
+        
+        # Compute FFT and get magnitude spectrum
         spectrum = np.abs(np.fft.fft(audio_chunk))[:n_bars]
-        weights = np.linspace(1.0, 3.0, n_bars)
-        spectrum = spectrum * weights
-        spectrum = np.clip(spectrum / np.max(spectrum) if np.max(spectrum) > 0 else spectrum, 0.01, 1.0)
-        bar_heights = np.maximum(spectrum * max_bar_height, 4).astype(np.int32)
+        
+        # Apply frequency weighting
+        freq_weights = np.linspace(0.5, 2.0, n_bars)  # Bass boost
+        freq_weights[n_bars//4:3*n_bars//4] *= 1.5    # Mid boost
+        spectrum = spectrum * freq_weights
+        
+        # Apply smoothing
+        spectrum = np.convolve(spectrum, np.hanning(5), mode='same')
+        
+        # Dynamic normalization with memory
+        if not hasattr(create_visualization_frame, 'max_spectrum'):
+            create_visualization_frame.max_spectrum = spectrum.max()
+        else:
+            # Smooth maximum value changes
+            create_visualization_frame.max_spectrum = max(
+                spectrum.max(),
+                create_visualization_frame.max_spectrum * 0.95
+            )
+        
+        # Normalize and apply non-linear scaling
+        spectrum = spectrum / create_visualization_frame.max_spectrum
+        spectrum = np.clip(spectrum, 0.05, 1.0)
+        spectrum = np.power(spectrum, 0.7)  # Adjust response curve
+        
+        # Add temporal smoothing
+        if not hasattr(create_visualization_frame, 'prev_heights'):
+            create_visualization_frame.prev_heights = np.zeros(n_bars)
+        
+        # Calculate new heights with smoothing
+        target_heights = spectrum * max_bar_height
+        smoothing_factor = 0.3  # Adjust this value to control smoothing (0-1)
+        bar_heights = np.maximum(
+            create_visualization_frame.prev_heights * (1 - smoothing_factor) +
+            target_heights * smoothing_factor,
+            4
+        ).astype(np.int32)
+        
+        # Store heights for next frame
+        create_visualization_frame.prev_heights = bar_heights
     else:
         bar_heights = np.full(n_bars, 4, dtype=np.int32)
 
