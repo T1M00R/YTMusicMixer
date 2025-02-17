@@ -125,9 +125,10 @@ def create_visualization_frame(
     if colors is None:
         colors = get_color_schemes()["1"]["colors"]
     
-    # Create layers
+    # Create multiple glow layers for stronger effect
     vis_layer = np.zeros((height, width, 3), dtype=np.uint8)
-    glow_layer = np.zeros((height, width, 3), dtype=np.uint8)
+    glow_layer_inner = np.zeros((height, width, 3), dtype=np.uint8)
+    glow_layer_outer = np.zeros((height, width, 3), dtype=np.uint8)
     
     if len(audio_chunk) > 0:
         # Process audio data
@@ -148,20 +149,16 @@ def create_visualization_frame(
         current = create_visualization_frame.prev_spectrum
         velocity = create_visualization_frame.velocity
         
-        # Spring physics parameters
         spring_constant = 0.3
         damping = 0.7
         
-        # Update physics
         acceleration = (target - current) * spring_constant - velocity * damping
         velocity += acceleration
         current += velocity
         
-        # Store state
         create_visualization_frame.prev_spectrum = current
         create_visualization_frame.velocity = velocity
         
-        # Use the smoothed spectrum
         spectrum = current
         
         # Generate points for the line
@@ -170,11 +167,10 @@ def create_visualization_frame(
         
         for i in range(n_points):
             x = int(i * x_step)
-            # Calculate y position with reduced amplitude (0.4 * 0.2 = 0.08)
-            y = int(height - 20 - (spectrum[i] * height * 0.08))  # Reduced to 20% of previous height
+            y = int(height - 20 - (spectrum[i] * height * 0.08))
             points.append((x, y))
         
-        # Draw the smooth line
+        # Draw the smooth line with enhanced glow
         for i in range(len(points) - 1):
             progress = i / (n_points - 1)
             
@@ -188,28 +184,44 @@ def create_visualization_frame(
                 color = tuple(int(c1 + (c2 - c1) * p) 
                             for c1, c2 in zip(colors[2], colors[3]))
             
-            # Draw main line segment
+            # Draw main line (thinner)
             cv2.line(vis_layer, 
                     points[i], 
                     points[i + 1], 
                     color, 
-                    3, 
+                    2,  # Thinner main line
                     cv2.LINE_AA)
             
-            # Draw glow
-            cv2.line(glow_layer,
+            # Draw inner glow (bright)
+            cv2.line(glow_layer_inner,
                     points[i],
                     points[i + 1],
                     color,
-                    9,
+                    6,  # Medium thickness
+                    cv2.LINE_AA)
+            
+            # Draw outer glow (soft)
+            cv2.line(glow_layer_outer,
+                    points[i],
+                    points[i + 1],
+                    color,
+                    12,  # Thicker for outer glow
                     cv2.LINE_AA)
     
-    # Apply glow
-    glow_layer = cv2.GaussianBlur(glow_layer, (15, 15), 7)
+    # Process glow layers
+    glow_layer_outer = cv2.GaussianBlur(glow_layer_outer, (21, 21), 9)
+    glow_layer_inner = cv2.GaussianBlur(glow_layer_inner, (11, 11), 3)
     
-    # Compose frame
+    # Compose frame with enhanced glow
     frame = background.copy()
-    frame = cv2.addWeighted(frame, 1.0, glow_layer, 0.3, 0)
+    
+    # Add outer glow first (soft)
+    frame = cv2.addWeighted(frame, 1.0, glow_layer_outer, 0.3, 0)
+    
+    # Add inner glow (brighter)
+    frame = cv2.addWeighted(frame, 1.0, glow_layer_inner, 0.5, 0)
+    
+    # Add main line (solid)
     vis_mask = cv2.cvtColor(vis_layer, cv2.COLOR_BGR2GRAY) > 0
     frame[vis_mask] = vis_layer[vis_mask]
     
