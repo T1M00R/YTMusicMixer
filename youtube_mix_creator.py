@@ -57,8 +57,8 @@ def create_music_mix(config: Config) -> bool:
         os.makedirs(config.OUTPUT_DIR, exist_ok=True)
         os.makedirs(config.BACKGROUNDS_DIR, exist_ok=True)
 
-        # Generate matching output paths
-        video_output, timestamp_output, description_output = get_matching_output_paths(config.OUTPUT_DIR)
+        # Get matching numbered output paths
+        final_video, timestamp_output, description_output = get_matching_output_paths(config.OUTPUT_DIR)
 
         # Check if we have any songs to process
         if not config.song_urls:
@@ -94,7 +94,7 @@ def create_music_mix(config: Config) -> bool:
             merged_audio,
             config.background_video,
             config.OUTPUT_DIR,
-            video_output.name
+            final_video.name
         )
 
         # Write timestamps to file
@@ -115,7 +115,7 @@ def create_music_mix(config: Config) -> bool:
             if result["success"]:
                 logger.info("Description generated successfully")
                 
-                # Write description content to the correct numbered file
+                # Write description content to the numbered description file
                 with open(description_output, "w", encoding="utf-8") as f:
                     f.write(result["content"])
                 

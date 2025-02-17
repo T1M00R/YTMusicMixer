@@ -113,4 +113,16 @@ def rename_audio_files(audio_dir: Path, original_files: List[str], song_titles: 
         
     except Exception as e:
         logger.error(f"Error renaming audio files: {str(e)}")
-        return False 
+        return False
+
+def get_matching_output_paths(output_dir: Path) -> tuple[Path, Path, Path]:
+    """Generate matching output paths for video, timestamps, and description"""
+    counter = 1
+    while True:
+        # Check if this number is already used
+        video_path = output_dir / f"final_mix_{counter}.mp4"
+        if not video_path.exists():
+            # Found an unused number, create matching paths
+            timestamp_path = output_dir / f"timestamps_{counter}.txt"
+            description_path = output_dir / f"mix_description_{counter}.txt"
+            return video_path, timestamp_path, description_path 
