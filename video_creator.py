@@ -135,7 +135,7 @@ def create_visualization_frame(
         spectrum = spectrum / max(spectrum.max(), 1)
         
         # Boost lower frequencies
-        freq_weights = np.linspace(2.5, 0.5, n_points)  # Increased bass boost
+        freq_weights = np.linspace(2.5, 0.5, n_points)
         spectrum = spectrum * freq_weights
         
         # Apply smoothing with momentum
@@ -170,8 +170,8 @@ def create_visualization_frame(
         
         for i in range(n_points):
             x = int(i * x_step)
-            # Calculate y position with increased amplitude
-            y = int(height - 20 - (spectrum[i] * height * 0.4))  # Increased amplitude
+            # Calculate y position with reduced amplitude (0.4 * 0.2 = 0.08)
+            y = int(height - 20 - (spectrum[i] * height * 0.08))  # Reduced to 20% of previous height
             points.append((x, y))
         
         # Draw the smooth line
@@ -235,7 +235,7 @@ def create_video(
         n_frames = int(duration * fps)
         samples_per_frame = int(len(audio_data) / n_frames)
         
-        # Pre-load background video frames for better performance
+        # Pre-load background video frames
         background_cap = cv2.VideoCapture(background_video)
         if not background_cap.isOpened():
             raise Exception("Could not open background video")
@@ -243,8 +243,7 @@ def create_video(
         total_bg_frames = int(background_cap.get(cv2.CAP_PROP_FRAME_COUNT))
         background_frames = []
         
-        # Add progress bar for background loading
-        logger.info("Loading background video frames...")
+        # Load background frames with simple progress bar
         with tqdm(total=total_bg_frames, desc="Loading background", unit="frames") as pbar:
             for _ in range(total_bg_frames):
                 ret, frame = background_cap.read()
@@ -253,24 +252,24 @@ def create_video(
                 pbar.update(1)
         background_cap.release()
         
-        # Prepare video writer with hardware acceleration if available
+        # Prepare video writer
         temp_video = os.path.join(temp_dir, "temp_video.mp4")
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         out = cv2.VideoWriter(temp_video, fourcc, fps, (1920, 1080))
         
-        # Get color scheme from user
-        colors = select_color_scheme()
+        # Use Neon Sunset as default
+        colors = get_color_schemes()["1"]["colors"]
         
-        # Generate frames with enhanced progress bar
+        # Generate frames with simplified progress bar
         with tqdm(
             total=n_frames,
             desc="Generating frames",
             unit="frames",
-            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]"
+            bar_format="{desc}: {n_fmt}/{total_fmt} [{elapsed}<{remaining}]"
         ) as pbar:
             start_time = time.time()
             for frame_idx in range(n_frames):
-                # Get background frame from memory
+                # Get background frame
                 background = background_frames[frame_idx % len(background_frames)]
                 
                 # Process audio chunk
@@ -281,18 +280,6 @@ def create_video(
                 # Create visualization frame
                 frame = create_visualization_frame(audio_chunk, background, colors=colors)
                 out.write(frame)
-                
-                # Update progress with FPS calculation
-                if frame_idx % 30 == 0:  # Update every 30 frames
-                    elapsed_time = time.time() - start_time
-                    if elapsed_time > 0:  # Prevent division by zero
-                        current_fps = frame_idx / elapsed_time
-                        remaining_frames = n_frames - frame_idx
-                        time_left = remaining_frames / current_fps if current_fps > 0 else 0
-                        pbar.set_postfix({
-                            'FPS': f"{current_fps:.1f}",
-                            'Time Left': f"{time_left/60:.1f}min"
-                        })
                 pbar.update(1)
         
         out.release()
