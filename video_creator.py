@@ -9,6 +9,8 @@ import cv2
 import tempfile
 import os
 import time
+import librosa
+from typing import List, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -56,113 +58,160 @@ def get_video_frame(video_capture, frame_number, width, height):
         return cv2.resize(frame, (width, height))
     return None
 
+def get_color_schemes() -> dict:
+    """Define available color schemes"""
+    return {
+        "1": {
+            "name": "Neon Sunset",
+            "colors": [
+                (255, 94, 225),    # Neon Pink
+                (255, 50, 150),    # Hot Pink
+                (255, 140, 0),     # Vivid Orange
+                (255, 215, 0)      # Golden Yellow
+            ]
+        },
+        "2": {
+            "name": "Cyberpunk",
+            "colors": [
+                (255, 0, 80),      # Hot Pink
+                (123, 0, 255),     # Purple
+                (0, 255, 255),     # Cyan
+                (0, 255, 140)      # Neon Green
+            ]
+        },
+        "3": {
+            "name": "Northern Lights",
+            "colors": [
+                (0, 255, 135),     # Aqua
+                (0, 255, 255),     # Cyan
+                (0, 191, 255),     # Deep Sky Blue
+                (148, 0, 211)      # Violet
+            ]
+        },
+        "4": {
+            "name": "Synthwave",
+            "colors": [
+                (255, 0, 136),     # Hot Pink
+                (158, 0, 255),     # Purple
+                (0, 183, 255),     # Blue
+                (255, 174, 0)      # Orange
+            ]
+        }
+    }
+
+def select_color_scheme() -> List[Tuple[int, int, int]]:
+    """Prompt user to select a color scheme"""
+    schemes = get_color_schemes()
+    
+    print("\nAvailable color schemes:")
+    for key, scheme in schemes.items():
+        print(f"{key}. {scheme['name']}")
+    
+    while True:
+        choice = input("\nSelect a color scheme (1-4): ").strip()
+        if choice in schemes:
+            return schemes[choice]["colors"]
+        print("Invalid choice. Please try again.")
+
 def create_visualization_frame(
     audio_chunk: np.ndarray,
     background: np.ndarray,
     height: int = 1080,
     width: int = 1920,
-    n_bars: int = 128,
-    gradient_start: tuple = (0, 191, 255),    # Deep Sky Blue
-    gradient_end: tuple = (135, 206, 250)     # Light Sky Blue
+    n_points: int = 128,
+    colors: List[Tuple[int, int, int]] = None
 ) -> np.ndarray:
-    """Create a single frame with audio visualization bars"""
-    # Create a black background for the visualization
-    vis_overlay = np.zeros((height, width, 3), dtype=np.uint8)
-    glow_overlay = np.zeros((height, width, 3), dtype=np.uint8)
+    """Create a single frame with a smooth audio visualization line"""
+    if colors is None:
+        colors = get_color_schemes()["1"]["colors"]
     
-    # Calculate bar positions and dimensions
-    bar_width = int(width / (n_bars * 1.5))
-    bar_spacing = int(width / n_bars)
-    max_bar_height = int(height * 0.25)
-    corner_radius = min(bar_width // 2, 3)
+    # Create layers
+    vis_layer = np.zeros((height, width, 3), dtype=np.uint8)
+    glow_layer = np.zeros((height, width, 3), dtype=np.uint8)
     
-    # Improved audio processing for better sync
     if len(audio_chunk) > 0:
-        # Apply window function to reduce edge artifacts
-        window = np.hanning(len(audio_chunk))
-        audio_chunk = audio_chunk * window
+        # Process audio data
+        spectrum = np.abs(np.fft.fft(audio_chunk))[:n_points]
+        spectrum = spectrum / max(spectrum.max(), 1)
         
-        # Compute FFT and get magnitude spectrum
-        spectrum = np.abs(np.fft.fft(audio_chunk))[:n_bars]
-        
-        # Apply frequency weighting
-        freq_weights = np.linspace(0.5, 2.0, n_bars)  # Bass boost
-        freq_weights[n_bars//4:3*n_bars//4] *= 1.5    # Mid boost
+        # Boost lower frequencies
+        freq_weights = np.linspace(2.5, 0.5, n_points)  # Increased bass boost
         spectrum = spectrum * freq_weights
         
-        # Apply smoothing
-        spectrum = np.convolve(spectrum, np.hanning(5), mode='same')
+        # Apply smoothing with momentum
+        if not hasattr(create_visualization_frame, 'prev_spectrum'):
+            create_visualization_frame.prev_spectrum = spectrum
+            create_visualization_frame.velocity = np.zeros_like(spectrum)
         
-        # Dynamic normalization with memory
-        if not hasattr(create_visualization_frame, 'max_spectrum'):
-            create_visualization_frame.max_spectrum = spectrum.max()
-        else:
-            # Smooth maximum value changes
-            create_visualization_frame.max_spectrum = max(
-                spectrum.max(),
-                create_visualization_frame.max_spectrum * 0.95
-            )
+        # Physics-based smoothing
+        target = spectrum
+        current = create_visualization_frame.prev_spectrum
+        velocity = create_visualization_frame.velocity
         
-        # Normalize and apply non-linear scaling
-        spectrum = spectrum / create_visualization_frame.max_spectrum
-        spectrum = np.clip(spectrum, 0.05, 1.0)
-        spectrum = np.power(spectrum, 0.7)  # Adjust response curve
+        # Spring physics parameters
+        spring_constant = 0.3
+        damping = 0.7
         
-        # Add temporal smoothing
-        if not hasattr(create_visualization_frame, 'prev_heights'):
-            create_visualization_frame.prev_heights = np.zeros(n_bars)
+        # Update physics
+        acceleration = (target - current) * spring_constant - velocity * damping
+        velocity += acceleration
+        current += velocity
         
-        # Calculate new heights with smoothing
-        target_heights = spectrum * max_bar_height
-        smoothing_factor = 0.3  # Adjust this value to control smoothing (0-1)
-        bar_heights = np.maximum(
-            create_visualization_frame.prev_heights * (1 - smoothing_factor) +
-            target_heights * smoothing_factor,
-            4
-        ).astype(np.int32)
+        # Store state
+        create_visualization_frame.prev_spectrum = current
+        create_visualization_frame.velocity = velocity
         
-        # Store heights for next frame
-        create_visualization_frame.prev_heights = bar_heights
-    else:
-        bar_heights = np.full(n_bars, 4, dtype=np.int32)
-
-    # Pre-calculate x positions
-    start_x = (width - (n_bars * bar_spacing)) // 2
-    x_positions = np.arange(n_bars) * bar_spacing + start_x
+        # Use the smoothed spectrum
+        spectrum = current
+        
+        # Generate points for the line
+        points = []
+        x_step = width / (n_points - 1)
+        
+        for i in range(n_points):
+            x = int(i * x_step)
+            # Calculate y position with increased amplitude
+            y = int(height - 20 - (spectrum[i] * height * 0.4))  # Increased amplitude
+            points.append((x, y))
+        
+        # Draw the smooth line
+        for i in range(len(points) - 1):
+            progress = i / (n_points - 1)
+            
+            # Calculate color based on position
+            if progress <= 0.5:
+                p = progress * 2
+                color = tuple(int(c1 + (c2 - c1) * p) 
+                            for c1, c2 in zip(colors[0], colors[1]))
+            else:
+                p = (progress - 0.5) * 2
+                color = tuple(int(c1 + (c2 - c1) * p) 
+                            for c1, c2 in zip(colors[2], colors[3]))
+            
+            # Draw main line segment
+            cv2.line(vis_layer, 
+                    points[i], 
+                    points[i + 1], 
+                    color, 
+                    3, 
+                    cv2.LINE_AA)
+            
+            # Draw glow
+            cv2.line(glow_layer,
+                    points[i],
+                    points[i + 1],
+                    color,
+                    9,
+                    cv2.LINE_AA)
     
-    # Draw bars with alpha channel for better visibility
-    for i in range(n_bars):
-        gradient_factor = bar_heights[i] / max_bar_height
-        # BGR format for OpenCV
-        bar_color = tuple(int(start + (end - start) * gradient_factor) 
-                         for start, end in zip(gradient_start, gradient_end))
-        
-        x1, x2 = x_positions[i], x_positions[i] + bar_width
-        y1 = height - bar_heights[i] - 30
-        y2 = height - 30
-        
-        # Draw bars with increased opacity
-        cv2.rectangle(vis_overlay, (x1, y1 + corner_radius), (x2, y2 - corner_radius), bar_color, -1, cv2.LINE_AA)
-        cv2.rectangle(vis_overlay, (x1 + corner_radius, y1), (x2 - corner_radius, y2), bar_color, -1, cv2.LINE_AA)
-        
-        # Rounded corners
-        cv2.circle(vis_overlay, (x1 + corner_radius, y1 + corner_radius), corner_radius, bar_color, -1, cv2.LINE_AA)
-        cv2.circle(vis_overlay, (x2 - corner_radius, y1 + corner_radius), corner_radius, bar_color, -1, cv2.LINE_AA)
-        cv2.circle(vis_overlay, (x1 + corner_radius, y2 - corner_radius), corner_radius, bar_color, -1, cv2.LINE_AA)
-        cv2.circle(vis_overlay, (x2 - corner_radius, y2 - corner_radius), corner_radius, bar_color, -1, cv2.LINE_AA)
-        
-        # Enhanced glow effect with brighter glow
-        glow_color = tuple(min(int(c * 1.8), 255) for c in bar_color)  # Increased brightness
-        cv2.rectangle(glow_overlay, (x1-4, y1-4), (x2+4, y2+4), 
-                     tuple(c//2 for c in glow_color), -1, cv2.LINE_AA)  # Increased glow opacity
+    # Apply glow
+    glow_layer = cv2.GaussianBlur(glow_layer, (15, 15), 7)
     
-    # Apply enhanced glow effect
-    glow_overlay = cv2.GaussianBlur(glow_overlay, (21, 21), 11)
-    
-    # Combine layers with proper alpha blending
+    # Compose frame
     frame = background.copy()
-    frame = cv2.addWeighted(frame, 0.7, glow_overlay, 0.6, 0)  # Increased glow intensity and dimmed background
-    frame = cv2.addWeighted(frame, 0.7, vis_overlay, 1.0, 0)   # Make bars more visible
+    frame = cv2.addWeighted(frame, 1.0, glow_layer, 0.3, 0)
+    vis_mask = cv2.cvtColor(vis_layer, cv2.COLOR_BGR2GRAY) > 0
+    frame[vis_mask] = vis_layer[vis_mask]
     
     return frame
 
@@ -209,6 +258,9 @@ def create_video(
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         out = cv2.VideoWriter(temp_video, fourcc, fps, (1920, 1080))
         
+        # Get color scheme from user
+        colors = select_color_scheme()
+        
         # Generate frames with enhanced progress bar
         with tqdm(
             total=n_frames,
@@ -227,7 +279,7 @@ def create_video(
                 audio_chunk = audio_data[start_idx:end_idx]
                 
                 # Create visualization frame
-                frame = create_visualization_frame(audio_chunk, background)
+                frame = create_visualization_frame(audio_chunk, background, colors=colors)
                 out.write(frame)
                 
                 # Update progress with FPS calculation
@@ -347,4 +399,52 @@ def convert_gif_to_mp4(gif_path: Path, temp_dir: Path) -> str:
         raise
     except Exception as e:
         logger.error(f"Unexpected error converting GIF to MP4: {str(e)}")
-        raise 
+        raise
+
+def test_visualization(
+    duration: float = 5.0,
+    fps: int = 30,
+    test_freq: float = 2.0
+) -> None:
+    """Test audio visualization bars with a synthetic sine wave"""
+    # Get color scheme from user
+    colors = select_color_scheme()
+    
+    # Create synthetic audio data (sine wave)
+    sample_rate = 44100
+    t = np.linspace(0, duration, int(sample_rate * duration))
+    audio_data = np.sin(2 * np.pi * test_freq * t)
+    
+    # Create a simple white background
+    background = np.full((1080, 1920, 3), 255, dtype=np.uint8)
+    
+    # Calculate frames
+    n_frames = int(duration * fps)
+    samples_per_frame = int(len(audio_data) / n_frames)
+    
+    # Create window
+    cv2.namedWindow('Visualization Test', cv2.WINDOW_NORMAL)
+    cv2.resizeWindow('Visualization Test', 960, 540)  # Half resolution for display
+    
+    # Generate and display frames
+    for i in range(n_frames):
+        # Get audio chunk for this frame
+        start = i * samples_per_frame
+        end = start + samples_per_frame
+        chunk = audio_data[start:end]
+        
+        # Create visualization frame
+        frame = create_visualization_frame(chunk, background, colors=colors)
+        
+        # Show frame
+        cv2.imshow('Visualization Test', frame)
+        
+        # Break loop if 'q' is pressed
+        if cv2.waitKey(int(1000/fps)) & 0xFF == ord('q'):
+            break
+    
+    cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    # Test the visualization
+    test_visualization() 
