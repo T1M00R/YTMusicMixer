@@ -118,26 +118,18 @@ def create_visualization_frame(
     background: np.ndarray,
     height: int = 1080,
     width: int = 1920,
-    n_points: int = 128,
+    n_points: int = 100, #num bars
     colors: List[Tuple[int, int, int]] = None
 ) -> np.ndarray:
-    """Create a single frame with a smooth audio visualization line"""
-    if colors is None:
-        colors = get_color_schemes()["1"]["colors"]
-    
-    # Create multiple glow layers for stronger effect
+    """Create a single frame with clean audio visualization bars"""
+    # Create layers
     vis_layer = np.zeros((height, width, 3), dtype=np.uint8)
-    glow_layer_inner = np.zeros((height, width, 3), dtype=np.uint8)
-    glow_layer_outer = np.zeros((height, width, 3), dtype=np.uint8)
+    glow_layer = np.zeros((height, width, 3), dtype=np.uint8)
     
     if len(audio_chunk) > 0:
         # Process audio data
         spectrum = np.abs(np.fft.fft(audio_chunk))[:n_points]
         spectrum = spectrum / max(spectrum.max(), 1)
-        
-        # Boost lower frequencies
-        freq_weights = np.linspace(2.5, 0.5, n_points)
-        spectrum = spectrum * freq_weights
         
         # Apply smoothing with momentum
         if not hasattr(create_visualization_frame, 'prev_spectrum'):
@@ -161,69 +153,64 @@ def create_visualization_frame(
         
         spectrum = current
         
-        # Generate points for the line
-        points = []
-        x_step = width / (n_points - 1)
+        # Adjust these values to change bar appearance
+        bar_width = int((width // (n_points * 1.2)) * 0.65)  # Reduced width by 65%
+        bar_color = (255, 255, 255)  # Pure white
+        glow_color = (255, 255, 255)  # White glow
+        corner_radius = int(bar_width * 0.3)  # Slightly smaller corners
         
         for i in range(n_points):
-            x = int(i * x_step)
-            y = int(height - 20 - (spectrum[i] * height * 0.08))
-            points.append((x, y))
-        
-        # Draw the smooth line with enhanced glow
-        for i in range(len(points) - 1):
-            progress = i / (n_points - 1)
+            # Calculate bar height and position
+            bar_height = int(spectrum[i] * height * 0.4)
+            x = int(width * (i + 0.5) / n_points)
+            y = height - bar_height - 20
+            bottom_y = height - 20
             
-            # Calculate color based on position
-            if progress <= 0.5:
-                p = progress * 2
-                color = tuple(int(c1 + (c2 - c1) * p) 
-                            for c1, c2 in zip(colors[0], colors[1]))
-            else:
-                p = (progress - 0.5) * 2
-                color = tuple(int(c1 + (c2 - c1) * p) 
-                            for c1, c2 in zip(colors[2], colors[3]))
+            # Convert all coordinates to integers
+            x1 = int(x - bar_width//2)
+            x2 = int(x + bar_width//2)
+            x1_corner = int(x - bar_width//2 + corner_radius)
+            x2_corner = int(x + bar_width//2 - corner_radius)
             
-            # Draw main line (thinner)
-            cv2.line(vis_layer, 
-                    points[i], 
-                    points[i + 1], 
-                    color, 
-                    2,  # Thinner main line
-                    cv2.LINE_AA)
+            # Draw the corners
+            center_tl = (x1_corner, int(y + corner_radius))
+            center_tr = (x2_corner, int(y + corner_radius))
+            center_bl = (x1_corner, bottom_y - corner_radius)
+            center_br = (x2_corner, bottom_y - corner_radius)
             
-            # Draw inner glow (bright)
-            cv2.line(glow_layer_inner,
-                    points[i],
-                    points[i + 1],
-                    color,
-                    6,  # Medium thickness
-                    cv2.LINE_AA)
+            cv2.ellipse(vis_layer, center_tl, (corner_radius, corner_radius), 0, 180, 270, bar_color, -1)
+            cv2.ellipse(vis_layer, center_tr, (corner_radius, corner_radius), 0, 270, 360, bar_color, -1)
+            cv2.ellipse(vis_layer, center_bl, (corner_radius, corner_radius), 0, 90, 180, bar_color, -1)
+            cv2.ellipse(vis_layer, center_br, (corner_radius, corner_radius), 0, 0, 90, bar_color, -1)
             
-            # Draw outer glow (soft)
-            cv2.line(glow_layer_outer,
-                    points[i],
-                    points[i + 1],
-                    color,
-                    12,  # Thicker for outer glow
-                    cv2.LINE_AA)
+            # Main rectangles with integer coordinates
+            cv2.rectangle(vis_layer,
+                (x1, int(y + corner_radius)),
+                (x2, bottom_y - corner_radius),
+                bar_color, -1)
+            
+            cv2.rectangle(vis_layer,
+                (x1_corner, int(y)),
+                (x2_corner, bottom_y),
+                bar_color, -1)
+            
+            # Glow effect with integer coordinates
+            cv2.rectangle(glow_layer,
+                (x1, int(y - 10)),
+                (x2, bottom_y),
+                glow_color, -1)
     
-    # Process glow layers
-    glow_layer_outer = cv2.GaussianBlur(glow_layer_outer, (21, 21), 9)
-    glow_layer_inner = cv2.GaussianBlur(glow_layer_inner, (11, 11), 3)
+    # Process glow
+    glow_layer = cv2.GaussianBlur(glow_layer, (21, 21), 7)
     
-    # Compose frame with enhanced glow
+    # Compose final frame with transparency
     frame = background.copy()
+    # Add glow with 20% opacity
+    frame = cv2.addWeighted(frame, 1.0, glow_layer, 0.2, 0)
     
-    # Add outer glow first (soft)
-    frame = cv2.addWeighted(frame, 1.0, glow_layer_outer, 0.3, 0)
-    
-    # Add inner glow (brighter)
-    frame = cv2.addWeighted(frame, 1.0, glow_layer_inner, 0.5, 0)
-    
-    # Add main line (solid)
+    # Add bars with 20% opacity
     vis_mask = cv2.cvtColor(vis_layer, cv2.COLOR_BGR2GRAY) > 0
-    frame[vis_mask] = vis_layer[vis_mask]
+    frame[vis_mask] = cv2.addWeighted(frame[vis_mask], 0.2, vis_layer[vis_mask], 0.8, 0)
     
     return frame
 
