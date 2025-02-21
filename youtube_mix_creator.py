@@ -42,7 +42,10 @@ def get_genre_input() -> str:
     print("- chill hip hop")
     print("- synthwave")
     print("- piano ambient")
-    return input("\nEnter the genre for your mix: ").strip()
+    print("(Press Enter for test mode)")
+    
+    genre = input("\nEnter the genre for your mix: ").strip()
+    return "test" if not genre else genre
 
 def create_music_mix(config: Config) -> bool:
     """
@@ -92,7 +95,7 @@ def create_music_mix(config: Config) -> bool:
         logger.info("Creating video...")
         final_video = create_video(
             merged_audio,
-            config.background_video,
+            config.background_source,
             config.OUTPUT_DIR,
             final_video.name
         )

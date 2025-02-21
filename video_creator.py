@@ -229,7 +229,7 @@ def create_visualization_frame(
 
 def create_video(
     audio_file: str,
-    background_video: str,
+    background_source: tuple[str, str],
     output_dir: Path,
     output_filename: str = "final_mix.mp4"
 ) -> str:
@@ -247,22 +247,37 @@ def create_video(
         n_frames = int(duration * fps)
         samples_per_frame = int(len(audio_data) / n_frames)
         
-        # Pre-load background video frames
-        background_cap = cv2.VideoCapture(background_video)
-        if not background_cap.isOpened():
-            raise Exception("Could not open background video")
+        background_path, bg_type = background_source
         
-        total_bg_frames = int(background_cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        background_frames = []
-        
-        # Load background frames with simple progress bar
-        with tqdm(total=total_bg_frames, desc="Loading background", unit="frames") as pbar:
-            for _ in range(total_bg_frames):
-                ret, frame = background_cap.read()
-                if ret:
+        # Handle background based on type
+        if bg_type == "video":
+            # Pre-load background video frames
+            background_cap = cv2.VideoCapture(background_path)
+            if not background_cap.isOpened():
+                raise Exception("Could not open background video")
+            
+            total_bg_frames = int(background_cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            background_frames = []
+            
+            # Load background frames with progress bar
+            with tqdm(total=total_bg_frames, desc="Loading background", unit="frames") as pbar:
+                while True:
+                    ret, frame = background_cap.read()
+                    if not ret:
+                        break
                     background_frames.append(cv2.resize(frame, (1920, 1080)))
-                pbar.update(1)
-        background_cap.release()
+                    pbar.update(1)
+            background_cap.release()
+            
+            if not background_frames:
+                raise Exception("No background frames loaded")
+        else:
+            # Load and prepare static image
+            background_img = cv2.imread(background_path)
+            if background_img is None:
+                raise Exception("Could not load background image")
+            background_img = cv2.resize(background_img, (1920, 1080))
+            background_frames = [background_img]  # Use single frame
         
         # Prepare video writer
         temp_video = os.path.join(temp_dir, "temp_video.mp4")
@@ -272,21 +287,16 @@ def create_video(
         # Use Neon Sunset as default
         colors = get_color_schemes()["1"]["colors"]
         
-        # Generate frames with simplified progress bar
-        with tqdm(
-            total=n_frames,
-            desc="Generating frames",
-            unit="frames",
-            bar_format="{desc}: {n_fmt}/{total_fmt} [{elapsed}<{remaining}]"
-        ) as pbar:
-            start_time = time.time()
+        # Generate frames with progress bar
+        with tqdm(total=n_frames, desc="Generating frames", unit="frames") as pbar:
             for frame_idx in range(n_frames):
-                # Get background frame
-                background = background_frames[frame_idx % len(background_frames)]
+                # Get background frame (loop if needed)
+                bg_idx = frame_idx % len(background_frames)
+                background = background_frames[bg_idx].copy()
                 
                 # Process audio chunk
                 start_idx = frame_idx * samples_per_frame
-                end_idx = start_idx + samples_per_frame
+                end_idx = min(start_idx + samples_per_frame, len(audio_data))
                 audio_chunk = audio_data[start_idx:end_idx]
                 
                 # Create visualization frame

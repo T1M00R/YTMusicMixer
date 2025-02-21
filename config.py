@@ -44,6 +44,34 @@ class Config:
         )
 
     @property
+    def background_source(self) -> tuple[str, str]:
+        """Get background source (either video or image) and its type"""
+        # Check for MP4 first
+        mp4_path = self.BACKGROUNDS_DIR / "bg.mp4"
+        if mp4_path.exists():
+            return str(mp4_path), "video"
+        
+        # Check for GIF
+        gif_path = self.BACKGROUNDS_DIR / "bg.gif"
+        if gif_path.exists():
+            from video_creator import convert_gif_to_mp4
+            return convert_gif_to_mp4(gif_path, self.TEMP_DIR), "video"
+        
+        # Check for image files
+        for ext in ['.jpg', '.jpeg', '.png']:
+            img_path = self.BACKGROUNDS_DIR / f"bg{ext}"
+            if img_path.exists():
+                return str(img_path), "image"
+            
+        raise FileNotFoundError(
+            "No background found! Please add either:\n"
+            f"- {mp4_path} (MP4 file)\n"
+            f"- {gif_path} (GIF file)\n"
+            f"- bg.jpg/bg.jpeg/bg.png (Image file)\n"
+            "in the backgrounds folder."
+        )
+
+    @property
     def song_urls(self) -> List[str]:
         """Get list of WAV files from audio directory"""
         if not self.AUDIO_DIR.exists():
