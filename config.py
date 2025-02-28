@@ -73,11 +73,14 @@ class Config:
 
     @property
     def song_urls(self) -> List[str]:
-        """Get list of WAV files from audio directory"""
+        """Get list of WAV and MP3 files from audio directory"""
         if not self.AUDIO_DIR.exists():
             self.AUDIO_DIR.mkdir(exist_ok=True)
             return []
         
-        # Get all .wav files from the audio directory
-        wav_files = list(self.AUDIO_DIR.glob("*.wav"))
-        return [str(file) for file in wav_files] 
+        # Get all .wav and .mp3 files from the audio directory
+        audio_files = []
+        audio_files.extend(list(self.AUDIO_DIR.glob("*.wav")))
+        audio_files.extend(list(self.AUDIO_DIR.glob("*.mp3")))
+        
+        return [str(file) for file in audio_files] 
