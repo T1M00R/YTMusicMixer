@@ -29,7 +29,7 @@ pip install -r requirements.txt
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/ytmusicmixer.git
+git clone https://github.com/T1M00R/ytmusicmixer.git
 cd ytmusicmixer
 ```
 
